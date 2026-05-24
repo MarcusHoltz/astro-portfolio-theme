@@ -1,122 +1,41 @@
-name: 2. Deploy to GitHub Pages
+name: Deploy to GitHub Pages
+
 on:
-  # Manual trigger:
-  #
-  # Hey! Did you want to run this and make/build your site?
-  # Go to Actions. The workflow is set for manual trigger.
-  # Actions → Deploy to GitHub Pages (button on left side)
-  # Run workflow (button on right side) → Run workflow
-  # Congratulations on your new website!
+  # Trigger the workflow every time you push to the `main` branch
+  # Using a different branch name? Replace `main` with your branch’s name
+  push:
+    branches: [ main ]
+  # Allows you to run this workflow manually from the Actions tab on GitHub.
   workflow_dispatch:
-  # Auto-deploy:
-  #
-  # If you'd rather have the site rebuild and redeploy automatically
-  # every time you push a change, uncomment the three lines below.
-  # Just remove the leading '#' from each of the three lines.
-  #
-  #push:
-  #  branches: [main]
+
+# Allow this job to clone the repo and create a page deployment
 permissions:
   contents: read
   pages: write
   id-token: write
-concurrency:
-  group: pages
-  cancel-in-progress: true
+
 jobs:
-  preflight:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check GitHub Pages is set to GitHub Actions source
-        run: |
-          PAGES_INFO=$(curl -s -o /dev/null -w "%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pages")
-          if [ "$PAGES_INFO" = "404" ]; then
-            echo ""
-            echo "╔══════════════════════════════════════════════════════════════════╗"
-            echo "║  GitHub Pages is not enabled for this repository.                 ║"
-            echo "║                                                                  ║"
-            echo "║  Fix: Go to Settings → Pages → Build and deployment              ║"
-            echo "║       Set Source to: GitHub Actions                              ║"
-            echo "║                                                                  ║"
-            echo "║  URL: https://github.com/${{ github.repository }}/settings/pages  ║"
-            echo "╚══════════════════════════════════════════════════════════════════╝"
-            echo ""
-            exit 1
-          fi
-          SOURCE=$(curl -s \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${{ github.repository }}/pages" \
-            | jq -r '.build_type // "legacy"')
-          if [ "$SOURCE" != "workflow" ]; then
-            echo ""
-            echo "╔══════════════════════════════════════════════════════════════════╗"
-            echo "║  GitHub Pages source is not set to 'GitHub Actions'.             ║"
-            echo "║  Current source: $SOURCE                                         ║"
-            echo "║                                                                  ║"
-            echo "║  Fix: Go to Settings → Pages → Build and deployment              ║"
-            echo "║       Set Source to: GitHub Actions                              ║"
-            echo "║                                                                  ║"
-            echo "║  URL: https://github.com/${{ github.repository }}/settings/pages  ║"
-            echo "╚══════════════════════════════════════════════════════════════════╝"
-            echo ""
-            exit 1
-          fi
-          echo "GitHub Pages source is correctly set to GitHub Actions."
   build:
-    needs: preflight
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-      - name: Install dependencies
-        run: pnpm install
-      - name: Resolve base path
-        run: |
-          OWNER="${GITHUB_REPOSITORY_OWNER}"
-          REPO="${GITHUB_REPOSITORY#*/}"
-          if [ -n "${{ vars.BASE_PATH }}" ]; then
-            echo "BASE_PATH=${{ vars.BASE_PATH }}" >> $GITHUB_ENV
-          elif [ "${REPO,,}" = "${OWNER,,}.github.io" ]; then
-            echo "BASE_PATH=/" >> $GITHUB_ENV
-          else
-            echo "BASE_PATH=/${REPO}/" >> $GITHUB_ENV
-          fi
-          if [ -n "${{ vars.SITE_URL }}" ]; then
-            echo "SITE_URL=${{ vars.SITE_URL }}" >> $GITHUB_ENV
-          elif [ "${REPO,,}" = "${OWNER,,}.github.io" ]; then
-            echo "SITE_URL=https://${OWNER}.github.io" >> $GITHUB_ENV
-          else
-            echo "SITE_URL=https://${OWNER}.github.io/${REPO}" >> $GITHUB_ENV
-          fi
-      - name: Build
-        run: pnpm run build
-        env:
-          SITE_URL: ${{ env.SITE_URL }}
-          BASE_PATH: ${{ env.BASE_PATH }}
-          GITHUB_USER: ${{ vars.GITHUB_USER }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
+      - name: Checkout your repository using git
+        uses: actions/checkout@v6
+      - name: Install, build, and upload your site
+        uses: withastro/action@v6
+        # with:
+          # path: . # The root location of your Astro project inside the repository. (optional)
+          # node-version: 24 # The specific version of Node that should be used to build your site. Defaults to 22. (optional)
+          # package-manager: pnpm@latest # The Node package manager that should be used to install dependencies and build your site. Automatically detected based on your lockfile. (optional)
+          # build-cmd: pnpm run build # The command to run to build your site. Runs the package build script/task by default. (optional)
+        # env:
+          # PUBLIC_POKEAPI: 'https://pokeapi.co/api/v2' # Use single quotation marks for the variable value. (optional)
+
   deploy:
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
